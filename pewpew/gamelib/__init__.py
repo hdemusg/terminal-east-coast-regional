@@ -25,6 +25,7 @@ from .game_state import GameState
 from .unit import GameUnit
 from .game_map import GameMap
 from .navigation import ShortestPathFinder
+from .unit import GameUnit
 
 __all__ = ["algocore", "game_state", "game_map", "navigation", "unit", "util"]
  
