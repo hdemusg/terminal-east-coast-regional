@@ -46,10 +46,12 @@ class AlgoStrategy(gamelib.AlgoCore):
         SP = 0
         # This is a good place to do initial setup
         self.scored_on_locations = []
-        self.template = []
+        self.template = [] # Template for strategy
         self.initialize_template()
         self.attack_type = SCOUT
         self.attack_direction = LEFTRIGHT
+        # If a structure gets below X% health, replace. Currently high value because it will sustain more dmg before getting actually removed
+        self.replaceRatio = 0.75 
 
     def on_turn(self, turn_state):
         """
@@ -64,7 +66,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         game_state.suppress_warnings(True)  #Comment or remove this line to enable warnings.
 
         self.gun_strategy(game_state)
-
         game_state.submit_turn()
 
 
@@ -81,6 +82,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             }
             self.template.append(tempStruct)
 
+    # Hardcoded template strategy
     def initialize_template(self):
         initialwalls = [[0, 13], [2, 11], [26, 13], [3, 10], [4, 9], [5, 8], [6, 7], [7, 6], [18, 6], [8, 5], [17, 5], [9, 4], [10, 4], [11, 4], [12, 4], [13, 4], [14, 4], [15, 4], [16, 4]]
         initialTurrets = [[1, 12], [23, 12], [20, 9]]
@@ -130,16 +132,35 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.gun_defense(game_state)
         self.gun_attack(game_state)
 
-    # TODO ADD REPAIR LOGIC IF ANY STRUCT IS LOW ON HP / REPAIR SYSTEM
     def gun_defense(self, game_state):
-        #Build out initial template
-        #Maintain initial template
-        #Upgrade existing and begin to add
-        #Add support buff units
+        # 1. Remove any structures below health % cutoff. (Needs to be first action or it might remove newly built buildings)
+        # 2. Build out initial template
+        # 3. Fortify initial template
+        # 4. Add support buff units
         
         if game_state.get_resource(SP) == 0:
             return
 
+        # 1. Remove low health structures
+        # Generating all possible squares in our half
+        locations = []
+        for i in range(28):
+            for j in range(14):
+                if game_state.game_map.in_arena_bounds([i, j]):
+                    locations.append([i, j])
+
+        for loc in locations:
+            currItem = game_state.game_map.__getitem__(loc)
+
+            if not currItem or len(currItem) == 0:
+                continue
+
+            # Just destroyed structures are item 0. This line is why we need to remove first.
+            dmgPercentage = currItem[0].health / currItem[0].max_health
+            if dmgPercentage < self.replaceRatio:
+                game_state.attempt_remove(loc)
+
+        # 2. Build out initial template
         for item in self.template:
 
             if game_state.get_resource(SP) == 0:
@@ -153,6 +174,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         if game_state.get_resource(SP) == 0:
             return
 
+        # 3. Fortify initial template
         # Fortify Left + Right side
         fortificationTurrets = [[24, 12], [25, 12], [20, 10], [3, 13], [4, 13], [24, 13], [3, 12], [4, 12], [5, 12]]
         for loc in fortificationTurrets:
@@ -160,12 +182,12 @@ class AlgoStrategy(gamelib.AlgoCore):
             game_state.attempt_upgrade(loc)
 
         #Fortify with walls
-        fortificationWalls = [[19, 11], [20, 11], [21, 11], [19, 10], [19, 9]]
+        fortificationWalls = [[19, 11], [20, 11], [21, 11], [19, 10], [19, 9], [26, 12], [5, 13]]
         for loc in fortificationWalls:
             game_state.attempt_spawn(WALL, loc)
             game_state.attempt_upgrade(loc)
 
-        # Add Rocket boosters
+        # 4. Add support buff units
         supportUnits = [[19, 8], [18, 7], [17, 6], [14, 5], [15, 5], [16, 5]]
         for loc in supportUnits:
             game_state.attempt_spawn(SUPPORT, loc)
