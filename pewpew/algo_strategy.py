@@ -199,34 +199,102 @@ class AlgoStrategy(gamelib.AlgoCore):
 
         return
 
+    def _attack(self, game_state, structures, scout, demolisher, interceptor, wallCnt):
+        sp = game_state.get_resource(0)
+        # PARAM 2 - The lower the number, the more demolishers
+        supportCount = round(max((sp - 16) // 3, 0))
+        supports = structures[-supportCount:]
+        walls = structures[:-supportCount]
+        if (len(supports) > 0):
+            game_state.attempt_spawn(SUPPORT, supports)
+        # game_state.attempt_upgrade(supports)
+        if (len(walls) > 0):
+            game_state.attempt_spawn(WALL, walls)
+        game_state.attempt_remove(structures)
+        game_state.attempt_spawn(INTERCEPTOR, interceptor)
+        if (wallCnt > 5):
+            game_state.attempt_spawn(DEMOLISHER, demolisher, 100)
+        else:
+            c = round(game_state.get_resource(1) // 2)
+            game_state.attempt_spawn(SCOUT, scout, c + 1)
+
+    def attackLeft(self, game_state, cnt):
+        core = [[8, 7], [9, 6], [10, 5], [11, 5], [12, 5], [13, 5], [14, 5], [15, 5], [
+            16, 5], [17, 5], [18, 4], [12, 3], [13, 3], [14, 3], [15, 3], [11, 2], [2, 13], [3, 12], [4, 11], [5, 10], [6, 9], [7, 8]]
+        scout = [[14, 0], [15, 1]]
+        demolisher = [[17, 3]]
+        interceptor = [[19, 5]]
+        self._attack(game_state, core, scout, demolisher, interceptor, cnt)
+
+    def attackRight(self, game_state, cnt):
+        core = [[19, 7], [18, 6], [10, 5], [11, 5], [12, 5], [13, 5], [14, 5], [
+            15, 5], [16, 5], [17, 5], [9, 4], [12, 3], [13, 3], [14, 3], [15, 3], [16, 2], [25, 13], [24, 12], [23, 11], [22, 10], [21, 9], [20, 8]]
+        scout = [[13, 0], [12, 1]]
+        demolisher = [[10, 3]]
+        interceptor = [[8, 5]]
+        self._attack(game_state, core, scout, demolisher, interceptor, cnt)
+
+    # Modifies defense to favour attacking
+    def attack(self, game_state):
+        # if self.attackNextTurn:
+            # We attacking - count dmg
+        leftAttack = sum(
+            [x.damage_i for x in game_state.get_attackers([1, 13], 0)])
+        rightAttack = sum(
+            [x.damage_i for x in game_state.get_attackers([26, 13], 0)])
+        leftZone = [[4, 18], [3, 17], [4, 17], [2, 16], [3, 16], [4, 16], [1, 15], [
+            2, 15], [3, 15], [4, 15], [0, 14], [1, 14], [2, 14], [3, 14], [4, 14]]
+        rightZone = [[23, 18], [23, 17], [24, 17], [23, 16], [24, 16], [25, 16], [23, 15], [
+            24, 15], [25, 15], [26, 15], [23, 14], [24, 14], [25, 14], [26, 14], [27, 14]]
+        leftZone = sum(
+            [0 if not game_state.contains_stationary_unit(x) else 1 for x in leftZone])
+        rightZone = sum(
+            [0 if not game_state.contains_stationary_unit(x) else 1 for x in rightZone])
+        if (leftAttack == rightAttack):
+            # Randomly choose
+            # Count structures in immediate area to test if theres a counter
+            if (leftZone >= rightZone):
+                self.attackRight(game_state, rightZone)
+            else:
+                self.attackLeft(game_state, leftZone)
+        elif (leftAttack > rightAttack):
+            # Attack right
+            self.attackRight(game_state, rightZone)
+        else:
+            # Attack left
+            self.attackLeft(game_state, leftZone)
+        # else:
+        #     self.tearDownGates(game_state)
+
+
     # Need to add more complex attack system
     def gun_attack(self, game_state):
+        self.attack(game_state)
 
+        # leftToRightSpawn = [12, 1]
+        # rightToLeftSpawn = [14, 0]
 
-        leftToRightSpawn = [12, 1]
-        rightToLeftSpawn = [14, 0]
+        # spawn = leftToRightSpawn
 
-        spawn = leftToRightSpawn
+        # # if self.attack_direction == LEFTRIGHT:
+        # #     spawn = leftToRightSpawn
+        # #     self.attack_direction =
 
-        # if self.attack_direction == LEFTRIGHT:
-        #     spawn = leftToRightSpawn
-        #     self.attack_direction =
+        # if game_state.get_resource(MP) > 14:
+        #     if self.attack_type == SCOUT:
+        #         game_state.attempt_spawn(SCOUT, spawn, 1000)
+        #         self.attack_type = DEMOLISHER
+        #         return
 
-        if game_state.get_resource(MP) > 14:
-            if self.attack_type == SCOUT:
-                game_state.attempt_spawn(SCOUT, spawn, 1000)
-                self.attack_type = DEMOLISHER
-                return
-
-            if self.attack_type == DEMOLISHER:
-                game_state.attempt_spawn(DEMOLISHER, spawn, 1000)
-                self.attack_type = SCOUT
-                return
+        #     if self.attack_type == DEMOLISHER:
+        #         game_state.attempt_spawn(DEMOLISHER, spawn, 1000)
+        #         self.attack_type = SCOUT
+        #         return
 
             
 
 
-        return
+        # return
 
 
 
