@@ -32,17 +32,26 @@ class AlgoStrategy(gamelib.AlgoCore):
         """
         gamelib.debug_write('Configuring your custom algo strategy...')
         self.config = config
-        global WALL, SUPPORT, TURRET, SCOUT, DEMOLISHER, INTERCEPTOR, MP, SP
+        global WALL, SUPPORT, TURRET, SCOUT, DEMOLISHER, INTERCEPTOR, MP, SP, UPGRADE, LEFTRIGHT, RIGHTLEFT
         WALL = config["unitInformation"][0]["shorthand"]
         SUPPORT = config["unitInformation"][1]["shorthand"]
         TURRET = config["unitInformation"][2]["shorthand"]
         SCOUT = config["unitInformation"][3]["shorthand"]
         DEMOLISHER = config["unitInformation"][4]["shorthand"]
         INTERCEPTOR = config["unitInformation"][5]["shorthand"]
+        UPGRADE = "UPGRADE"
+        LEFTRIGHT= "LEFTRIGHT"
+        RIGHTLEFT = "RIGHTLEFT"
         MP = 1
         SP = 0
         # This is a good place to do initial setup
         self.scored_on_locations = []
+        self.template = [] # Template for strategy
+        self.initialize_template()
+        self.attack_type = SCOUT
+        self.attack_direction = LEFTRIGHT
+        # If a structure gets below X% health, replace. Currently high value because it will sustain more dmg before getting actually removed
+        self.replaceRatio = 0.75 
 
     def on_turn(self, turn_state):
         """
@@ -56,8 +65,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         gamelib.debug_write('Performing turn {} of your custom algo strategy'.format(game_state.turn_number))
         game_state.suppress_warnings(True)  #Comment or remove this line to enable warnings.
 
-        self.starter_strategy(game_state)
-
+        self.gun_strategy(game_state)
         game_state.submit_turn()
 
 
@@ -65,6 +73,230 @@ class AlgoStrategy(gamelib.AlgoCore):
     NOTE: All the methods after this point are part of the sample starter-algo
     strategy and can safely be replaced for your custom algo.
     """
+
+    def addItems(self, coords, givenType):
+         for loc in coords:
+            tempStruct = {
+                "struct": givenType,
+                "pos": loc
+            }
+            self.template.append(tempStruct)
+
+    # Hardcoded template strategy
+    def initialize_template(self):
+        initialwalls = [[0, 13], [2, 11], [26, 13], [3, 10], [4, 9], [5, 8], [6, 7], [7, 6], [18, 6], [8, 5], [17, 5], [9, 4], [10, 4], [11, 4], [12, 4], [13, 4], [14, 4], [15, 4], [16, 4]]
+        initialTurrets = [[1, 12], [23, 12], [20, 9]]
+        initialUpgrade = [[20, 9]]
+
+        self.addItems(initialwalls, WALL)
+        self.addItems(initialTurrets, TURRET)
+        self.addItems(initialUpgrade, UPGRADE)
+
+        turn2Walls = [[1, 13], [24, 13], [27, 13], [20, 8], [19, 7]]
+
+        self.addItems(turn2Walls, WALL)
+
+        turn3Walls = [[21, 11]]
+        turn3Upgrade = [[23, 12]]
+
+        self.addItems(turn3Walls, WALL)
+        self.addItems(turn3Upgrade, UPGRADE)
+
+        turn4Upgrade = [[1, 12]]
+        turn4Walls = [[19, 9]]
+
+        self.addItems(turn4Walls, WALL)
+        self.addItems(turn4Upgrade, UPGRADE)
+
+        turn5Turrets = [[25, 12], [25, 12], [21, 10]]
+        turn5Walls = [[23, 13], [25, 13]]
+
+        self.addItems(turn5Walls, WALL)
+        self.addItems(turn5Turrets, TURRET)
+
+        turn6Upgrade = [[1, 13]]
+        turn6Turrets = [[2, 12]]
+        turn6Walls = [[4, 13], [2, 13]]
+
+        self.addItems(turn6Walls, WALL)
+        self.addItems(turn6Turrets, TURRET)
+        self.addItems(turn6Upgrade, UPGRADE)
+
+        upgradeWalls = [[0, 13], [1, 13], [2, 13], [3, 13], [4, 13], [23, 13], [24, 13], [25, 13], [26, 13], [27, 13]]
+        self.addItems(upgradeWalls, UPGRADE)
+
+        leftOverTurrents = [[24, 12], [25, 12], [20, 10], [21, 10], [2, 13], [25, 12], [25, 12]]
+        self.addItems(leftOverTurrents, UPGRADE)
+
+    def gun_strategy(self, game_state):
+        self.gun_defense(game_state)
+        self.gun_attack(game_state)
+
+    def gun_defense(self, game_state):
+        # 1. Remove any structures below health % cutoff. (Needs to be first action or it might remove newly built buildings)
+        # 2. Build out initial template
+        # 3. Fortify initial template
+        # 4. Add support buff units
+        
+        if game_state.get_resource(SP) == 0:
+            return
+
+        # 1. Remove low health structures
+        # Generating all possible squares in our half
+        locations = []
+        for i in range(28):
+            for j in range(14):
+                if game_state.game_map.in_arena_bounds([i, j]):
+                    locations.append([i, j])
+
+        for loc in locations:
+            currItem = game_state.game_map.__getitem__(loc)
+
+            if not currItem or len(currItem) == 0:
+                continue
+
+            # Just destroyed structures are item 0. This line is why we need to remove first.
+            dmgPercentage = currItem[0].health / currItem[0].max_health
+            if dmgPercentage < self.replaceRatio:
+                game_state.attempt_remove(loc)
+
+        # 2. Build out initial template
+        for item in self.template:
+
+            if game_state.get_resource(SP) == 0:
+                return
+
+            if item["struct"] == UPGRADE:
+                game_state.attempt_upgrade(item["pos"])
+            else:
+                game_state.attempt_spawn(item["struct"], item["pos"])
+
+        if game_state.get_resource(SP) == 0:
+            return
+
+        # 3. Fortify initial template
+        # Fortify Left + Right side
+        fortificationTurrets = [[24, 12], [25, 12], [20, 10], [3, 13], [4, 13], [24, 13], [3, 12], [4, 12], [5, 12]]
+        for loc in fortificationTurrets:
+            game_state.attempt_spawn(TURRET, loc)
+            game_state.attempt_upgrade(loc)
+
+        #Fortify with walls
+        fortificationWalls = [[19, 11], [20, 11], [21, 11], [19, 10], [19, 9], [26, 12], [5, 13]]
+        for loc in fortificationWalls:
+            game_state.attempt_spawn(WALL, loc)
+            game_state.attempt_upgrade(loc)
+
+        # 4. Add support buff units
+        supportUnits = [[19, 8], [18, 7], [17, 6], [14, 5], [15, 5], [16, 5]]
+        for loc in supportUnits:
+            game_state.attempt_spawn(SUPPORT, loc)
+            # game_state.attempt_upgrade(loc)
+
+        supportUnits = [[18, 8], [17, 7], [15, 6], [16, 6], [12, 3], [13, 3], [14, 3], [15, 3]]
+        for loc in supportUnits:
+            game_state.attempt_spawn(SUPPORT, loc)
+
+        return
+
+    def _attack(self, game_state, structures, scout, demolisher, interceptor, wallCnt):
+        sp = game_state.get_resource(0)
+        # PARAM 2 - The lower the number, the more demolishers
+        supportCount = round(max((sp - 16) // 3, 0))
+        supports = structures[-supportCount:]
+        walls = structures[:-supportCount]
+        if (len(supports) > 0):
+            game_state.attempt_spawn(SUPPORT, supports)
+        # game_state.attempt_upgrade(supports)
+        if (len(walls) > 0):
+            game_state.attempt_spawn(WALL, walls)
+        game_state.attempt_remove(structures)
+        # game_state.attempt_spawn(INTERCEPTOR, interceptor)
+        if (wallCnt > 5):
+            game_state.attempt_spawn(DEMOLISHER, demolisher, 100)
+        else:
+            c = round(game_state.get_resource(1) // 2)
+            game_state.attempt_spawn(SCOUT, scout, c + 1)
+
+    def attackLeft(self, game_state, cnt):
+        core = [[8, 7], [9, 6], [10, 5], [11, 5], [12, 5], [13, 5], [14, 5], [15, 5], [
+            16, 5], [17, 5], [18, 4], [12, 3], [13, 3], [14, 3], [15, 3], [11, 2], [2, 13], [3, 12], [4, 11], [5, 10], [6, 9], [7, 8]]
+        scout = [[16, 2], [14, 0]]
+        demolisher = [[14, 0]]
+        interceptor = [[19, 5]]
+        self._attack(game_state, core, scout, demolisher, interceptor, cnt)
+
+    def attackRight(self, game_state, cnt):
+        core = [[19, 7], [18, 6], [10, 5], [11, 5], [12, 5], [13, 5], [14, 5], [
+            15, 5], [16, 5], [17, 5], [9, 4], [12, 3], [13, 3], [14, 3], [15, 3], [16, 2], [25, 13], [24, 12], [23, 11], [22, 10], [21, 9], [20, 8]]
+        scout = [[11, 2], [13, 0]]
+        demolisher = [[13, 0]]
+        interceptor = [[8, 5]]
+        self._attack(game_state, core, scout, demolisher, interceptor, cnt)
+
+    # Modifies defense to favour attacking
+    def attack(self, game_state):
+        # if self.attackNextTurn:
+            # We attacking - count dmg
+        leftAttack = sum(
+            [x.damage_i for x in game_state.get_attackers([1, 13], 0)])
+        rightAttack = sum(
+            [x.damage_i for x in game_state.get_attackers([26, 13], 0)])
+        leftZone = [[4, 18], [3, 17], [4, 17], [2, 16], [3, 16], [4, 16], [1, 15], [
+            2, 15], [3, 15], [4, 15], [0, 14], [1, 14], [2, 14], [3, 14], [4, 14]]
+        rightZone = [[23, 18], [23, 17], [24, 17], [23, 16], [24, 16], [25, 16], [23, 15], [
+            24, 15], [25, 15], [26, 15], [23, 14], [24, 14], [25, 14], [26, 14], [27, 14]]
+        leftZone = sum(
+            [0 if not game_state.contains_stationary_unit(x) else 1 for x in leftZone])
+        rightZone = sum(
+            [0 if not game_state.contains_stationary_unit(x) else 1 for x in rightZone])
+        if (leftAttack == rightAttack):
+            # Randomly choose
+            # Count structures in immediate area to test if theres a counter
+            if (leftZone >= rightZone):
+                self.attackRight(game_state, rightZone)
+            else:
+                self.attackLeft(game_state, leftZone)
+        elif (leftAttack > rightAttack):
+            # Attack right
+            self.attackRight(game_state, rightZone)
+        else:
+            # Attack left
+            self.attackLeft(game_state, leftZone)
+        # else:
+        #     self.tearDownGates(game_state)
+
+
+    # Need to add more complex attack system
+    def gun_attack(self, game_state):
+        self.attack(game_state)
+
+        # leftToRightSpawn = [12, 1]
+        # rightToLeftSpawn = [14, 0]
+
+        # spawn = leftToRightSpawn
+
+        # # if self.attack_direction == LEFTRIGHT:
+        # #     spawn = leftToRightSpawn
+        # #     self.attack_direction =
+
+        # if game_state.get_resource(MP) > 14:
+        #     if self.attack_type == SCOUT:
+        #         game_state.attempt_spawn(SCOUT, spawn, 1000)
+        #         self.attack_type = DEMOLISHER
+        #         return
+
+        #     if self.attack_type == DEMOLISHER:
+        #         game_state.attempt_spawn(DEMOLISHER, spawn, 1000)
+        #         self.attack_type = SCOUT
+        #         return
+
+            
+
+
+        # return
+
+
 
     def starter_strategy(self, game_state):
         """
@@ -76,7 +308,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         # First, place basic defenses
         self.build_defences(game_state)
         # Now build reactive defenses based on where the enemy scored
-        self.build_reactive_defense(game_state)
+
 
         # If the turn is less than 5, stall with interceptors and wait to see enemy's base
         if game_state.turn_number < 5:
